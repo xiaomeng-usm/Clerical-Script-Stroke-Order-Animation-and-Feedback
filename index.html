@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sifu Calligraphy - 隶书笔顺练习</title>
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+      background-color: #f7f4ed; /* 宣纸温润底色 */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;
+      color: #2b2b2b;
+    }
+
+    /* 顶部操作条 */
+    .top-search-bar {
+      width: 100%;
+      max-width: 440px;
+      height: 52px;
+      background: #ffffff;
+      border: 1px solid #dcd3c1;
+      border-radius: 26px;
+      display: flex;
+      align-items: center;
+      padding: 4px 8px 4px 18px;
+      box-shadow: 0 3px 8px rgba(139, 119, 90, 0.08);
+      margin-bottom: 12px;
+    }
+    .current-char-display {
+      font-size: 24px;
+      font-weight: bold;
+      color: #2c1609;
+      flex-grow: 1;
+    }
+    .btn-top {
+      border: none;
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-left: 6px;
+    }
+    .btn-clear { background: #eae4d5; color: #4a3e35; }
+    .btn-animate { background: #8b3a2b; color: #ffffff; }
+
+    /* 中心米字格画布 */
+    .canvas-card {
+      width: 320px;
+      height: 320px;
+      background: #fffdf9;
+      border: 3px solid #8c7355;
+      border-radius: 12px;
+      position: relative;
+      /* 经典朱红浅虚线米字格 */
+      background-image: 
+        linear-gradient(to right, transparent 49.3%, #e8bcaf 49.3%, #e8bcaf 50.7%, transparent 50.7%),
+        linear-gradient(to bottom, transparent 49.3%, #e8bcaf 49.3%, #e8bcaf 50.7%, transparent 50.7%),
+        linear-gradient(45deg, transparent 49.5%, #f2ded8 49.5%, #f2ded8 50.5%, transparent 50.5%),
+        linear-gradient(-45deg, transparent 49.5%, #f2ded8 49.5%, #f2ded8 50.5%, transparent 50.5%);
+      box-shadow: 0 6px 16px rgba(120, 95, 65, 0.12);
+      overflow: hidden;
+    }
+
+    /* 笔画图层容器：保证所有笔画同比例绝对对齐 */
+    .stroke-layer-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .char-image-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .bg-layer {
+      opacity: 0.18; /* 浅淡底稿供老人描红观察 */
+    }
+
+    /* 状态指示胶囊条 */
+    .stats-row {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .capsule-card {
+      flex: 1;
+      background: #ffffff;
+      border: 1px solid #dfd7c5;
+      border-radius: 14px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    }
+    .icon-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #f5ebe6;
+      color: #8b3a2b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .capsule-meta {
+      display: flex;
+      flex-direction: column;
+    }
+    .capsule-title {
+      font-size: 10px;
+      color: #7d6e5d;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+    .capsule-value {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2b1d12;
+    }
+
+    /* 反馈提示区域 */
+    #feedback-panel {
+      width: 100%;
+      max-width: 440px;
+      min-height: 44px;
+      margin-top: 10px;
+      padding: 8px 14px;
+      background: #efebe1;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: bold;
+      color: #594632;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-left: 4px solid #8b3a2b;
+    }
+
+    /* 控制面板 */
+    .control-panel {
+      width: 100%;
+      max-width: 440px;
+      background: #ffffff;
+      border: 1px solid #dcd3c1;
+      border-radius: 20px;
+      padding: 14px;
+      margin-top: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-btn {
+      background: #f7f3ea;
+      border: 1px solid #d8cdba;
+      border-radius: 14px;
+      padding: 8px 14px;
+      font-size: 15px;
+      font-weight: bold;
+      color: #4a3e35;
+      cursor: pointer;
+    }
+    .play-circle {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #8b3a2b;
+      color: #ffffff;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    /* 5个例字切换 */
+    .char-selector {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid #eee8db;
+      padding-top: 10px;
+    }
+    .char-pill {
+      border: 1px solid #cfc2ad;
+      background: #faf8f2;
+      border-radius: 16px;
+      padding: 4px 14px;
+      font-size: 18px;
+      cursor: pointer;
+      color: #42352b;
+      font-weight: bold;
+    }
+    .char-pill.active {
+      background: #8b3a2b;
+      color: #ffffff;
+      border-color: #8b3a2b;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部栏 -->
+  <div class="top-search-bar">
+    <div class="current-char-display" id="char-label">二</div>
+    <button class="btn-top btn-clear" onclick="clearCanvas()">清空</button>
+    <button class="btn-top btn-animate" onclick="playFullAnimation()">演示</button>
+  </div>
+
+  <!-- 中心米字格画布容器 -->
+  <div class="canvas-card">
+    <div id="layer-container" class="stroke-layer-container"></div>
+  </div>
+
+  <!-- 胶囊数据 -->
+  <div class="stats-row">
+    <div class="capsule-card">
+      <div class="icon-circle">⟳</div>
+      <div class="capsule-meta">
+        <span class="capsule-title">PROGRESS</span>
+        <span class="capsule-value" id="progress-val">0 / 2</span>
+      </div>
+    </div>
+    <div class="capsule-card">
+      <div class="icon-circle">⚡</div>
+      <div class="capsule-meta">
+        <span class="capsule-title">TOTAL STROKES</span>
+        <span class="capsule-value" id="total-val">2</span>
+      </div>
+    </div>
+    <div class="capsule-card">
+      <div class="icon-circle">✎</div>
+      <div class="capsule-meta">
+        <span class="capsule-title">CHARACTER</span>
+        <span class="capsule-value" id="char-val">二</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 反馈条 -->
+  <div id="feedback-panel">点击“演示”观看真实笔顺，或点击“后笔”逐笔学习。</div>
+
+  <!-- 底部控制器 (包含前字、后字、前笔、后笔) -->
+  <div class="control-panel">
+    <div class="control-row">
+      <button class="nav-btn" onclick="prevCharacter()">前字</button>
+      <button class="nav-btn" onclick="prevStroke()">前笔</button>
+      <button class="play-circle" onclick="playFullAnimation()">▶</button>
+      <button class="nav-btn" onclick="nextStroke()">后笔</button>
+      <button class="nav-btn" onclick="nextCharacter()">后字</button>
+    </div>
+
+    <!-- 5个例字快速直达 -->
+    <div class="char-selector">
+      <span style="font-size:13px; color:#857563; font-weight:bold;">例字:</span>
+      <button class="char-pill active" onclick="switchChar('二')">二</button>
+      <button class="char-pill" onclick="switchChar('三')">三</button>
+      <button class="char-pill" onclick="switchChar('王')">王</button>
+      <button class="char-pill" onclick="switchChar('里')">里</button>
+      <button class="char-pill" onclick="switchChar('百')">百</button>
+    </div>
+  </div>
+
+  <script>
+    // 完全对应你上传的 PNG 图片文件名和笔画顺序
+    const CHAR_CONFIG = {
+      '二': {
+        total: 2,
+        bg: 'stroke-order/二.png',
+        strokes: ['stroke-order/二-1.png', 'stroke-order/二-2.png']
+      },
+      '三': {
+        total: 3,
+        bg: 'stroke-order/三.png',
+        strokes: ['stroke-order/三-1.png', 'stroke-order/三-2.png', 'stroke-order/三-3.png']
+      },
+      '王': {
+        total: 4,
+        bg: 'stroke-order/王.png',
+        strokes: ['stroke-order/王-1.png', 'stroke-order/王-2.png', 'stroke-order/王-3.png', 'stroke-order/王-4.png']
+      },
+      '里': {
+        total: 7,
+        bg: 'stroke-order/里.png',
+        strokes: ['stroke-order/里-1.png', 'stroke-order/里-2.png', 'stroke-order/里-3.png', 'stroke-order/里-4.png', 'stroke-order/里-5.png', 'stroke-order/里-6.png', 'stroke-order/里-7.png']
+      },
+      '百': {
+        total: 6,
+        bg: 'stroke-order/百.png',
+        strokes: ['stroke-order/百-1.png', 'stroke-order/百-2.png', 'stroke-order/百-3.png', 'stroke-order/百-4.png', 'stroke-order/百-5.png', 'stroke-order/百-6.png']
+      }
+    };
+
+    const charOrder = ['二', '三', '王', '里', '百'];
+    const urlParams = new URLSearchParams(window.location.search);
+    let currentChar = urlParams.get('char') || '二';
+    let currentStep = 0; // 当前展示到第几笔
+    let isAnimating = false;
+
+    const layerContainer = document.getElementById('layer-container');
+    const charLabel = document.getElementById('char-label');
+    const charVal = document.getElementById('char-val');
+    const totalVal = document.getElementById('total-val');
+    const progressVal = document.getElementById('progress-val');
+    const feedbackPanel = document.getElementById('feedback-panel');
+
+    // 切换例字
+    function switchChar(charName) {
+      if (!CHAR_CONFIG[charName]) return;
+      currentChar = charName;
+      currentStep = 0;
+      isAnimating = false;
+
+      charLabel.innerText = currentChar;
+      charVal.innerText = currentChar;
+      totalVal.innerText = CHAR_CONFIG[currentChar].total;
+      progressVal.innerText = `0 / ${CHAR_CONFIG[currentChar].total}`;
+
+      // 按钮高亮联动
+      document.querySelectorAll('.char-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText === currentChar);
+      });
+
+      renderLayers();
+      feedbackPanel.style.color = "#594632";
+      feedbackPanel.innerText = `已切换到“${currentChar}”，点击“演示”观看笔画顺序。`;
+    }
+
+    // 核心渲染：基于切图图层叠加
+    function renderLayers() {
+      const config = CHAR_CONFIG[currentChar];
+      layerContainer.innerHTML = '';
+
+      // 1. 底层：浅淡原碑帖整字图（供临摹与参考位置）
+      const bgImg = document.createElement('img');
+      bgImg.src = config.bg;
+      bgImg.className = 'char-image-layer bg-layer';
+      bgImg.alt = `${currentChar}底稿`;
+      layerContainer.appendChild(bgImg);
+
+      // 2. 表层：按笔顺依次叠加你切出的真实墨迹笔画 PNG
+      for (let i = 0; i < currentStep; i++) {
+        if (config.strokes[i]) {
+          const strokeImg = document.createElement('img');
+          strokeImg.src = config.strokes[i];
+          strokeImg.className = 'char-image-layer';
+          strokeImg.alt = `${currentChar}第${i+1}笔`;
+          layerContainer.appendChild(strokeImg);
+        }
+      }
+    }
+
+    // 单笔推进 (后笔)
+    function nextStroke() {
+      const config = CHAR_CONFIG[currentChar];
+      if (currentStep < config.total) {
+        currentStep++;
+        progressVal.innerText = `${currentStep} / ${config.total}`;
+        renderLayers();
+        feedbackPanel.style.color = "#8b3a2b";
+        feedbackPanel.innerText = `正在展示第 ${currentStep} 笔，请注意蚕头燕尾走势。`;
+      } else {
+        feedbackPanel.style.color = "#2c1609";
+        feedbackPanel.innerText = `全字 ${config.total} 笔已全部演示完成！`;
+      }
+    }
+
+    // 单笔后退 (前笔)
+    function prevStroke() {
+      const config = CHAR_CONFIG[currentChar];
+      if (currentStep > 0) {
+        currentStep--;
+        progressVal.innerText = `${currentStep} / ${config.total}`;
+        renderLayers();
+        feedbackPanel.style.color = "#594632";
+        feedbackPanel.innerText = `返回上一笔，当前在第 ${currentStep} 笔。`;
+      }
+    }
+
+    // 完整笔顺动画演示 (带柔和进度联动)
+    function playFullAnimation() {
+      if (isAnimating) return;
+      isAnimating = true;
+      currentStep = 0;
+      renderLayers();
+      const config = CHAR_CONFIG[currentChar];
+
+      feedbackPanel.style.color = "#8b3a2b";
+      feedbackPanel.innerText = `正在逐笔演示隶书“${currentChar}”的书写顺序...`;
+
+      function stepAnimation() {
+        if (currentStep < config.total) {
+          currentStep++;
+          progressVal.innerText = `${currentStep} / ${config.total}`;
+          renderLayers();
+          setTimeout(stepAnimation, 900); // 间隔0.9秒，节奏适合老年人从容看清
+        } else {
+          isAnimating = false;
+          feedbackPanel.style.color = "#1f5f3b";
+          feedbackPanel.innerText = `演示完毕！请点击“后字”练习下一个字。`;
+        }
+      }
+      setTimeout(stepAnimation, 350);
+    }
+
+    // 清空画板
+    function clearCanvas() {
+      isAnimating = false;
+      currentStep = 0;
+      progressVal.innerText = `0 / ${CHAR_CONFIG[currentChar].total}`;
+      renderLayers();
+      feedbackPanel.style.color = "#594632";
+      feedbackPanel.innerText = "已恢复为浅色描红底稿，请点击“演示”开始。";
+    }
+
+    // 后字
+    function nextCharacter() {
+      let idx = charOrder.indexOf(currentChar);
+      if (idx < charOrder.length - 1) {
+        switchChar(charOrder[idx + 1]);
+      } else {
+        feedbackPanel.style.color = "#8b3a2b";
+        feedbackPanel.innerText = "这已经是最后一个字啦！";
+      }
+    }
+
+    // 前字
+    function prevCharacter() {
+      let idx = charOrder.indexOf(currentChar);
+      if (idx > 0) {
+        switchChar(charOrder[idx - 1]);
+      } else {
+        feedbackPanel.style.color = "#8b3a2b";
+        feedbackPanel.innerText = "这是第一个字“二”哦。";
+      }
+    }
+
+    window.onload = function() {
+      switchChar(currentChar);
+    };
+  </script>
+</body>
+</html>
