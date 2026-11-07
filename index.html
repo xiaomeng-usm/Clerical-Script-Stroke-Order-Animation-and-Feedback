@@ -291,7 +291,39 @@
       <button class="char-pill" onclick="switchChar('百')">百</button>
     </div>
   </div>
+<!-- 练习模式切换按钮 -->
+    <div style="text-align: center; margin: 16px 0 10px 0;">
+      <button id="practice-toggle-btn" class="nav-btn" style="width: auto; padding: 6px 18px; font-weight: bold; background: #eef4fe; border-color: #8ab4f8; color: #1a73e8;" onclick="togglePracticeMode()">
+        ✍️ 开始亲手练一练 (Practice)
+      </button>
+    </div>
 
+    <!-- 练习互动区（默认折叠，点击展开） -->
+    <div id="practice-panel" style="display: none; margin-top: 15px; text-align: center;">
+      <div style="position: relative; width: 360px; height: 360px; margin: 0 auto; background: #faf8f2; border: 2px solid #cfc2ad; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <!-- 米字格浅虚线 -->
+        <div style="position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(to right, transparent 49.5%, #e8decb 49.5%, #e8decb 50.5%, transparent 50.5%), linear-gradient(to bottom, transparent 49.5%, #e8decb 49.5%, #e8decb 50.5%, transparent 50.5%), linear-gradient(45deg, transparent 49.6%, #f0e7d8 49.6%, #f0e7d8 50.4%, transparent 50.4%), linear-gradient(-45deg, transparent 49.6%, #f0e7d8 49.6%, #f0e7d8 50.4%, transparent 50.4%); background-size: 100% 100%;"></div>
+
+        <!-- 1. 灰色垫底全字（供描摹临摹） -->
+        <img id="practice-ghost-img" src="" alt="临摹灰底" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0.22; filter: grayscale(100%); pointer-events: none;">
+
+        <!-- 2. 已写对、点亮变浓黑的墨迹图层 -->
+        <div id="practice-done-strokes" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+
+        <!-- 3. 手写触控交互画板 -->
+        <canvas id="practice-write-canvas" width="360" height="360" style="position: absolute; left: 0; top: 0; cursor: crosshair; z-index: 5;"></canvas>
+      </div>
+
+      <!-- 鼓励与正向反馈卡片（大字号，老年易读） -->
+      <div id="practice-feedback-text" style="width: 360px; margin: 12px auto; padding: 10px 14px; font-size: 16px; font-weight: bold; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; color: #595959; min-height: 44px; display: flex; align-items: center; justify-content: center;">
+        请顺着浅灰色的第 1 笔慢慢起笔描摹...
+      </div>
+
+      <!-- 辅助重写按钮 -->
+      <div style="margin-bottom: 20px;">
+        <button class="nav-btn" style="width: auto; padding: 4px 12px; font-size: 13px;" onclick="resetPracticeState()">重新描摹此字</button>
+      </div>
+    </div>
   <script>
     // 完全对应你上传的 PNG 图片文件名和笔画顺序
     const CHAR_CONFIG = {
@@ -469,6 +501,168 @@
     window.onload = function() {
       switchChar(currentChar);
     };
+    // ==================== 练习与反馈核心功能 ====================
+let isPracticeOpen = false;
+let practiceStrokeIndex = 0;
+let isDrawingStroke = false;
+let userHasDrawnCurrent = false;
+
+// 切换练习模式
+function togglePracticeMode() {
+  isPracticeOpen = !isPracticeOpen;
+  const panel = document.getElementById('practice-panel');
+  const btn = document.getElementById('practice-toggle-btn');
+
+  if (isPracticeOpen) {
+    panel.style.display = 'block';
+    btn.innerText = '👀 返回观摩演示';
+    btn.style.background = '#fef0f0';
+    btn.style.borderColor = '#fbc4c4';
+    btn.style.color = '#f56c6c';
+    initPracticeCanvas();
+    resetPracticeState();
+  } else {
+    panel.style.display = 'none';
+    btn.innerText = '✍️ 开始亲手练一练 (Practice)';
+    btn.style.background = '#eef4fe';
+    btn.style.borderColor = '#8ab4f8';
+    btn.style.color = '#1a73e8';
+  }
+}
+
+// 重置当前字的练习状态
+function resetPracticeState() {
+  practiceStrokeIndex = 0;
+  userHasDrawnCurrent = false;
+  
+  // 清理上一轮写好的黑笔迹与画板
+  const container = document.getElementById('practice-done-strokes');
+  if (container) container.innerHTML = '';
+  
+  const canvas = document.getElementById('practice-write-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // 设置当前汉字的灰底
+  const ghost = document.getElementById('practice-ghost-img');
+  if (ghost && CHAR_CONFIG[currentChar]) {
+    ghost.src = CHAR_CONFIG[currentChar].bg;
+  }
+
+  setElderFeedback(`请先描出“${currentChar}”字的第 1 笔，顺着浅灰痕迹运笔。`, '#595959', '#fffbe6', '#ffe58f');
+}
+
+// 设置鼓励性反馈文字
+function setElderFeedback(text, color, bgColor, borderColor) {
+  const fb = document.getElementById('practice-feedback-text');
+  if (fb) {
+    fb.innerText = text;
+    fb.style.color = color;
+    fb.style.backgroundColor = bgColor;
+    fb.style.borderColor = borderColor;
+  }
+}
+
+// 初始化交互画布（支持电脑鼠标与平板触屏）
+function initPracticeCanvas() {
+  const canvas = document.getElementById('practice-write-canvas');
+  if (!canvas || canvas.dataset.initialized) return;
+  canvas.dataset.initialized = "true";
+
+  const ctx = canvas.getContext('2d');
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = 'rgba(20, 20, 20, 0.75)';
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+  }
+
+  function start(e) {
+    e.preventDefault();
+    isDrawingStroke = true;
+    userHasDrawnCurrent = true;
+    const pos = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  }
+
+  function move(e) {
+    if (!isDrawingStroke) return;
+    e.preventDefault();
+    const pos = getPos(e);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+  }
+
+  function end(e) {
+    if (!isDrawingStroke) return;
+    isDrawingStroke = false;
+
+    // 学员描完一笔，自动将该笔画转换为标准浓黑墨迹
+    if (userHasDrawnCurrent) {
+      applyStrokeSuccess();
+    }
+  }
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  window.addEventListener('touchend', end);
+}
+
+// 描对一笔后的即时正向反馈
+function applyStrokeSuccess() {
+  const config = CHAR_CONFIG[currentChar];
+  if (!config) return;
+
+  const total = config.total;
+  
+  if (practiceStrokeIndex < total) {
+    // 叠加标准浓黑笔画切片
+    const strokeImg = document.createElement('img');
+    strokeImg.src = config.strokes[practiceStrokeIndex];
+    strokeImg.style.position = 'absolute';
+    strokeImg.style.left = '0';
+    strokeImg.style.top = '0';
+    strokeImg.style.width = '100%';
+    strokeImg.style.height = '100%';
+    document.getElementById('practice-done-strokes').appendChild(strokeImg);
+
+    // 清空画板上的草稿轨迹，保持浓墨干爽
+    const canvas = document.getElementById('practice-write-canvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    practiceStrokeIndex++;
+
+    if (practiceStrokeIndex < total) {
+      const compliments = [
+        `起笔平稳！第 ${practiceStrokeIndex} 笔写得很有力度，请顺着写第 ${practiceStrokeIndex + 1} 笔。`,
+        `位置极佳！笔意连贯，咱们接着来看第 ${practiceStrokeIndex + 1} 笔。`,
+        `运笔沉着从容，非常端正！请描摹第 ${practiceStrokeIndex + 1} 笔。`
+      ];
+      const tip = compliments[(practiceStrokeIndex - 1) % compliments.length];
+      setElderFeedback(tip, '#2e7d32', '#edf7ed', '#c8e6c9');
+    } else {
+      setElderFeedback(`🎉 太棒了！“${currentChar}”字全笔顺利完成，沉稳有力，神采飞扬！`, '#b71c1c', '#ffebee', '#ffcdd2');
+    }
+  }
+}
   </script>
 </body>
 </html>
